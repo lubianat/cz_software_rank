@@ -3,7 +3,7 @@ This is a small derived dataset from the CZ Software Mentions dataset with a 202
 It has the aggregated counts for the curation categories `not_curated`, `unclear`, and `software` as well as and aggregate for the three together (i.e., excluding `not_software`).
 
 
-Each of the files include two columns, `software`, with the normalize "software" (or related entity) name, and `count`, with the number of rows in the `data/disambiguated/disambiguated/comm_disambiguated.tsv.gz` table of the original dataset.
+Each of the files include two columns, `software`, with the normalize "software" (or related entity) name, and `count`, with the count of unique pmids for each disambiguated software in the `data/disambiguated/disambiguated/comm_disambiguated.tsv.gz` table of the original dataset.
 
 Details on the original dataset can be found in:
 
