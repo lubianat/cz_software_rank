@@ -33,7 +33,6 @@
   }
   #toggle:hover { color: var(--fg); border-color: var(--muted); }
 
-  /* DataTables styling, kept minimal and themed */
   .dt-search input {
     font: inherit; font-size: 13px; color: var(--fg);
     background: var(--bg); border: 1px solid var(--line);
@@ -49,6 +48,11 @@
   }
   table.dataTable tbody td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line); }
   table.dataTable tbody tr:hover td { background: var(--row); }
+  /* Rank column: right-aligned, tabular nums, muted */
+  table.dataTable td:first-child, table.dataTable th:first-child {
+    text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); width: 3.5rem;
+  }
+  /* Papers column: right-aligned, tabular nums */
   table.dataTable td:last-child, table.dataTable th:last-child { text-align: right; font-variant-numeric: tabular-nums; }
   .dt-info, .dt-paging { color: var(--muted); font-size: 12px; }
   .dt-paging button.dt-paging-button {
@@ -73,7 +77,7 @@
   </header>
   <div id="status">loading data…</div>
   <table id="tbl" style="display:none">
-    <thead><tr><th>Software</th><th>Papers</th></tr></thead>
+    <thead><tr><th>Rank</th><th>Software</th><th>Papers</th></tr></thead>
     <tbody></tbody>
   </table>
 
@@ -93,30 +97,33 @@
 <script>
 const FILE = "cz_aggregates_exclude_not_software.tsv";
 
-// --- theme: follow OS by default, allow manual override ---
 const root = document.documentElement;
 const prefersDark = matchMedia("(prefers-color-scheme: dark)").matches;
 root.dataset.theme = prefersDark ? "dark" : "light";
 document.getElementById("toggle").onclick = () =>
   root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
 
-// --- load TSV and build table ---
 fetch(FILE)
   .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
   .then(text => {
+    // Sort descending by count, then assign fixed ranks
     const rows = text.trim().split("\n").slice(1).map(l => {
       const [sw, count] = l.split("\t");
       return [sw, Number(count)];
     });
+    rows.sort((a, b) => b[1] - a[1]);
+    const ranked = rows.map((r, i) => [i + 1, r[0], r[1]]);
+
     document.getElementById("status").remove();
     const tbl = document.getElementById("tbl");
     tbl.style.display = "";
     new DataTable(tbl, {
-      data: rows,
-      order: [[1, "desc"]],
+      data: ranked,
+      order: [[0, "asc"]],
       pageLength: 25,
       lengthChange: false,
       columns: [
+        { title: "Rank" },
         { title: "Software" },
         { title: "Papers", render: (d, t) => t === "display" ? d.toLocaleString() : d }
       ],
