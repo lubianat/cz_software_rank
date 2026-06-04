@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CZ Software Mentions</title>
+
+<link rel="stylesheet" href="https://cdn.datatables.net/2.1.8/css/dataTables.dataTables.min.css">
+<style>
+  :root {
+    --bg: #fbfbfa; --fg: #1c1c1c; --muted: #6b6b6b;
+    --line: #e2e2df; --row: #f3f3f0; --accent: #2b6cb0;
+  }
+  :root[data-theme="dark"] {
+    --bg: #15161a; --fg: #d7d8db; --muted: #8a8c93;
+    --line: #2a2c33; --row: #1c1e24; --accent: #7aa2d6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.5rem 1.25rem;
+    background: var(--bg); color: var(--fg);
+    font: 14px/1.5 "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 1.5rem; }
+  h1 { font-size: 1rem; font-weight: 500; margin: 0; letter-spacing: -0.01em; }
+  h1 .dim { color: var(--muted); }
+  #toggle {
+    font: inherit; font-size: 12px; cursor: pointer;
+    background: none; border: 1px solid var(--line); color: var(--muted);
+    padding: 0.3rem 0.6rem; border-radius: 5px;
+  }
+  #toggle:hover { color: var(--fg); border-color: var(--muted); }
+
+  /* DataTables styling, kept minimal and themed */
+  .dt-search input {
+    font: inherit; font-size: 13px; color: var(--fg);
+    background: var(--bg); border: 1px solid var(--line);
+    border-radius: 5px; padding: 0.35rem 0.6rem; min-width: 220px;
+  }
+  .dt-search input:focus { outline: none; border-color: var(--accent); }
+  .dt-search label { color: var(--muted); }
+  table.dataTable { width: 100% !important; border-collapse: collapse; margin: 1rem 0; }
+  table.dataTable thead th {
+    text-align: left; font-weight: 500; color: var(--muted);
+    border-bottom: 1px solid var(--line); padding: 0.5rem 0.6rem; font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  table.dataTable tbody td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line); }
+  table.dataTable tbody tr:hover td { background: var(--row); }
+  table.dataTable td:last-child, table.dataTable th:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .dt-info, .dt-paging { color: var(--muted); font-size: 12px; }
+  .dt-paging button.dt-paging-button {
+    color: var(--muted) !important; border: none !important; background: none !important;
+    padding: 0.2rem 0.55rem !important; border-radius: 4px; cursor: pointer;
+  }
+  .dt-paging button.dt-paging-button.current { color: var(--fg) !important; background: var(--row) !important; }
+  .dt-paging button.dt-paging-button:hover:not(.disabled) { color: var(--accent) !important; }
+  .dt-paging button.disabled { opacity: 0.35; cursor: default; }
+  #status { color: var(--muted); font-size: 13px; }
+  footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 12px; line-height: 1.7; }
+  footer a { color: var(--muted); text-decoration: none; border-bottom: 1px solid var(--line); }
+  footer a:hover { color: var(--accent); border-color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>cz software mentions (2022) <span class="dim">/ excluding not_software</span></h1>
+    <button id="toggle" aria-label="Toggle theme">◐ theme</button>
+  </header>
+  <div id="status">loading data…</div>
+  <table id="tbl" style="display:none">
+    <thead><tr><th>Software</th><th>Papers</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <footer>
+    Derived dataset (unique-PMID counts, 2022 cutoff) from the
+    <a href="https://datadryad.org/dataset/doi:10.5061/dryad.6wwpzgn2c">CZ Software Mentions dataset</a>.
+    Sources:
+    <a href="https://github.com/chanzuckerberg/software-mentions">software-mentions</a> ·
+    <a href="https://datadryad.org/dataset/doi:10.5061/dryad.6wwpzgn2c">Dryad</a> ·
+    <a href="https://arxiv.org/abs/2209.00693">arXiv:2209.00693</a>.
+    Website: <a href="https://github.com/lubianat/cz_software_rank">lubianat/cz_software_rank</a>.
+  </footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+<script>
+const FILE = "cz_aggregates_exclude_not_software.tsv";
+
+// --- theme: follow OS by default, allow manual override ---
+const root = document.documentElement;
+const prefersDark = matchMedia("(prefers-color-scheme: dark)").matches;
+root.dataset.theme = prefersDark ? "dark" : "light";
+document.getElementById("toggle").onclick = () =>
+  root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+
+// --- load TSV and build table ---
+fetch(FILE)
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.text(); })
+  .then(text => {
+    const rows = text.trim().split("\n").slice(1).map(l => {
+      const [sw, count] = l.split("\t");
+      return [sw, Number(count)];
+    });
+    document.getElementById("status").remove();
+    const tbl = document.getElementById("tbl");
+    tbl.style.display = "";
+    new DataTable(tbl, {
+      data: rows,
+      order: [[1, "desc"]],
+      pageLength: 25,
+      lengthChange: false,
+      columns: [
+        { title: "Software" },
+        { title: "Papers", render: (d, t) => t === "display" ? d.toLocaleString() : d }
+      ],
+      language: { search: "", searchPlaceholder: "filter software…" }
+    });
+  })
+  .catch(e => {
+    document.getElementById("status").textContent =
+      `could not load ${FILE} (${e.message}). serve this file over http, e.g. python3 -m http.server`;
+  });
+</script>
+</body>
+</html>
