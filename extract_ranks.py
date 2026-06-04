@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
 """
-Stream the CZI software-mentions *disambiguated* TSV and aggregate counts per
-software into several curation-label buckets, in a single pass.
+Stream the CZI software-mentions *disambiguated* TSV and aggregate UNIQUE PMID
+counts per software into several curation-label buckets, in a single pass.
 
-Convention over configuration:
-  - input is read from a fixed path (see INPUT below)
-  - four output tables are always written (see OUTPUTS below)
+Counts distinct PMIDs (mirrors df.groupby('software').nunique() on pmid), so a
+software mentioned several times in one paper counts once.
 
-Software-name logic mirrors the notebook:
-  - use `mapped_to_software`
-  - if that is 'not_disambiguated' (or missing/empty), fall back to raw `software`
-
-Why csv and not awk: the `text` column holds free text with quoted tabs/newlines.
-csv.reader handles quoting and multi-line fields; an awk line pass would corrupt them.
+Convention over configuration: fixed input path, four fixed output tables.
 """
 
 import csv
@@ -39,12 +33,15 @@ def open_maybe_gz(path: Path):
     return open(path, "rt", newline="")
 
 
-def write_table(path: Path, counts: dict):
+def write_table(path: Path, pmid_sets: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", newline="") as out_f:
         out_f.write("software\tcount\n")
-        for software, count in sorted(counts.items(), key=lambda x: (-x[1], x[0])):
-            out_f.write(f"{software}\t{count}\n")
+        # count = number of distinct pmids
+        for software, pmids in sorted(
+            pmid_sets.items(), key=lambda x: (-len(x[1]), x[0])
+        ):
+            out_f.write(f"{software}\t{len(pmids)}\n")
 
 
 def main():
@@ -53,9 +50,9 @@ def main():
 
     csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
 
-    # One counter per bucket
-    buckets = {name: defaultdict(int) for name in OUTPUTS}
-    label_seen = defaultdict(int)  # distribution of raw curation_label values
+    # One pmid-set per bucket
+    buckets = {name: defaultdict(set) for name in OUTPUTS}
+    label_seen = defaultdict(int)
 
     print(f"Reading from: {INPUT}", file=sys.stderr)
 
@@ -73,7 +70,7 @@ def main():
 
         i_sw = idx["software"]
         i_pm = idx["pmid"]
-        i_mp = idx.get("mapped_to_software")  # absent in some exports
+        i_mp = idx.get("mapped_to_software")
         i_cl = idx.get("curation_label")
         need = max(x for x in (i_sw, i_pm, i_mp, i_cl) if x is not None)
 
@@ -90,7 +87,6 @@ def main():
             label = row[i_cl] if i_cl is not None else ""
             label_seen[label] += 1
 
-            # Software name (prefer disambiguated mapping, fall back to raw)
             m = row[i_mp] if i_mp is not None else row[i_sw]
             if m in ("not_disambiguated", ""):
                 m = row[i_sw]
@@ -100,22 +96,20 @@ def main():
                 skipped_empty += 1
                 continue
 
-            # --- Bucketing ---
+            # --- Bucketing: add pmid to the right set(s) ---
             if label == "software":
-                buckets["only_software"][m] += 1
-                buckets["exclude_not_software"][m] += 1
+                buckets["only_software"][m].add(pmid)
+                buckets["exclude_not_software"][m].add(pmid)
             elif label == "unclear":
-                buckets["unclear"][m] += 1
-                buckets["exclude_not_software"][m] += 1
-            elif label == "not_curated":
-                buckets["not_curated"][m] += 1
-                buckets["exclude_not_software"][m] += 1
+                buckets["unclear"][m].add(pmid)
+                buckets["exclude_not_software"][m].add(pmid)
+            elif label == "":
+                buckets["not_curated"][m].add(pmid)
+                buckets["exclude_not_software"][m].add(pmid)
             elif label == "not_software":
                 pass  # excluded everywhere
             else:
-                # unexpected label: keep it out of the curated buckets but
-                # still count it toward exclude_not_software
-                buckets["exclude_not_software"][m] += 1
+                buckets["exclude_not_software"][m].add(pmid)
 
     # --- Report -------------------------------------------------------------
     print(f"\nProcessing complete:", file=sys.stderr)
